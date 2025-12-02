@@ -163,7 +163,7 @@ def get_args():
                         help="""model path to load,
                                 0 to not reload (default: 0)""")
 
-    parser.add_argument('--path_object_norm_inv_perplexity', type=str, default='/home/yhcao/DATA/HM3D/object_norm_inv_perplexity.npy')
+    parser.add_argument('--path_object_norm_inv_perplexity', type=str, default='data/object_norm_inv_perplexity.npy')
 
 
     # parse arguments

@@ -105,8 +105,14 @@ class Semantic_Mapping_SG(nn.Module):
             os.makedirs(pcd_save_path)
         if not os.path.exists(som_path):
             os.makedirs(som_path)
-        Image.fromarray(color_img_bgr.cpu().numpy().astype(np.uint8),'RGB').save(os.path.join(image_path, str(idx)+'.jpg'))
-        gobs = detection(Image.fromarray(color_img_bgr.cpu().numpy().astype(np.uint8),'RGB'),idx,visualization_path,detection_path)
+        
+        # [修改] 使用 PIL 内存对象，不走磁盘 IO
+        pil_img = Image.fromarray(color_img_bgr.cpu().numpy().astype(np.uint8),'RGB')
+        pil_img.save(os.path.join(image_path, str(idx)+'.jpg')) # 仅作备份
+        
+        # [修改] 传入 pil_img 而不是路径
+        gobs = detection(pil_img, idx, visualization_path, detection_path)
+        
         # if gobs !=None :
         if gobs is not None :
             res=[]# [image; pcd; intrinsic; pose]
@@ -118,7 +124,10 @@ class Semantic_Mapping_SG(nn.Module):
             self.objects,self.bg_objects,self.changed=cfvoxel(self.cfg_detection,res,gobs,self.objects,idx=idx,step=idx,classes=self.instance_classes_set,bg_objects=self.bg_objects,img_name=os.path.join(image_path, '{}.jpg'.format(idx)),pcd_path=pcd_path,som_path=som_path,changed=self.changed)
             # relation_list,image_list,image_objects_dict,image_pair_dict,check_relation=prepareRelationForCOG(self.cfg_detection,self.objects,self.changed,som_path,idx)
             # generateSoMImage(self,image_objects_dict,self.objects,som_pth_step,pkl_pth)
-            generateSomPrompt(self.args,os.path.join(image_path, str(idx)+'.jpg'),som_path,pose_curr,camera_param_to_camera_matrix(self.env_camera_matrix)[:3,:3],self.objects)
+            
+            # [修改] 传入 pil_img 而不是路径
+            generateSomPrompt(self.args, pil_img, som_path, pose_curr, camera_param_to_camera_matrix(self.env_camera_matrix)[:3,:3], self.objects, img_name=str(idx))
+
     def updateSceneGraph(self,save_path,idx,exp_map):
         som_path = os.path.join(save_path,"som/")
         if not os.path.exists(som_path):
@@ -230,7 +239,8 @@ class Semantic_Mapping_SG(nn.Module):
         XYZ_cm_std = world_view_t.float()
         XYZ_cm_std[..., :2] = torch.floor(XYZ_cm_std[..., :2] / self.resolution)
         XYZ_cm_std[..., 2] = torch.floor((XYZ_cm_std[..., 2] / self.z_resolution) - min_h) 
-        XYZ_cm_std = XYZ_cm_std.int().reshape(-1,3)
+        # 强制转换为 long (int64)，这是 PyTorch 对索引的要求
+        XYZ_cm_std = XYZ_cm_std.long().reshape(-1,3)
         index =(XYZ_cm_std >torch.tensor([0,0,0]).to(self.device)) & (XYZ_cm_std < torch.tensor([self.map_size_cm // self.resolution, self.map_size_cm // self.resolution,
             self.max_height - self.min_height]).to(self.device))
         index_new = torch.where(index[:,0]&index[:,1]&index[:,2])[0]

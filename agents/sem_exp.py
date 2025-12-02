@@ -38,7 +38,11 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env_hm3d):
 
         # initialize semantic segmentation prediction model
         if args.sem_gpu_id == -1:
-            args.sem_gpu_id = config_env.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID
+            if hasattr(config_env, "habitat"):
+                args.sem_gpu_id = config_env.habitat.simulator.habitat_sim_v0.gpu_device_id
+            else:
+                # 兼容某些可能是旧结构的边缘情况
+                args.sem_gpu_id = config_env.simulator.habitat_sim_v0.gpu_device_id
 
         self.device = args.device
         # self.sem_pred = SemanticPredMaskRCNN(args)
@@ -371,50 +375,23 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env_hm3d):
 
     # @brief: 对obs进行了降采样,包括语义的和RGB。 后面要将我们的cfslam这一套也融合到这里来
     def _preprocess_obs(self, obs, use_seg=True):
-        args = self.args
-        # print("obs: ", obs)
-        obs = obs.transpose(1, 2, 0)
-        rgb = obs[:, :, :3]
-        depth = obs[:, :, 3:4]
-        self.rgb_vis = self.rgb_vis = rgb[:, :, ::-1]
-        # semantic = obs[:,:,4:5].squeeze()
-        # # print("obs: ", semantic.shape)
-        # if args.use_gtsem:
-        #     self.rgb_vis = rgb
-        #     sem_seg_pred = np.zeros((rgb.shape[0], rgb.shape[1], 15 + 1))
-        #     for i in range(16):
-        #         sem_seg_pred[:,:,i][semantic == i+1] = 1
-        # else: 
-        #     red_semantic_pred, semantic_pred = self._get_sem_pred(
-        #         rgb.astype(np.uint8), depth, use_seg=use_seg)
-            
-        #     sem_seg_pred = np.zeros((rgb.shape[0], rgb.shape[1], 15 + 1))   
-        #     for i in range(0, 15):
-        #         # print(mp_categories_mapping[i])
-        #         sem_seg_pred[:,:,i][red_semantic_pred == mp_categories_mapping[i]] = 1
+            args = self.args
+            obs = obs.transpose(1, 2, 0)
+            rgb = obs[:, :, :3]
+            depth = obs[:, :, 3:4]
+            self.rgb_vis = rgb[:, :, ::-1] # 此时是 640x480
 
-        #     sem_seg_pred[:,:,0][semantic_pred[:,:,0] == 0] = 0
-        #     sem_seg_pred[:,:,1][semantic_pred[:,:,1] == 0] = 0
-        #     sem_seg_pred[:,:,3][semantic_pred[:,:,3] == 0] = 0
-        #     sem_seg_pred[:,:,4][semantic_pred[:,:,4] == 1] = 1
-        #     sem_seg_pred[:,:,5][semantic_pred[:,:,5] == 1] = 1
+            depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
-        # sem_seg_pred = self._get_sem_pred(
-        #     rgb.astype(np.uint8), depth, use_seg=use_seg)
+            # [恢复] 使用原版的下采样逻辑 (ds=4)
+            ds = args.env_frame_width // args.frame_width
+            if ds != 1:
+                rgb = np.asarray(self.res(rgb.astype(np.uint8)))
+                depth = depth[ds // 2::ds, ds // 2::ds]
 
-        depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
-
-        ds = args.env_frame_width // args.frame_width  # Downscaling factor
-        if ds != 1:
-            rgb = np.asarray(self.res(rgb.astype(np.uint8)))
-            depth = depth[ds // 2::ds, ds // 2::ds]
-            # sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
-
-        depth = np.expand_dims(depth, axis=2)
-        state = np.concatenate((rgb, depth),
-                               axis=2).transpose(2, 0, 1)
-
-        return state
+            depth = np.expand_dims(depth, axis=2)
+            state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
+            return state
 
     # def _preprocess_depth(self, depth, min_d, max_d):
     #     depth = depth[:, :, 0] * 1
@@ -552,9 +529,11 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env_hm3d):
         
         semantic = cv2.imread(inputs['semantic_path'],cv2.IMREAD_COLOR)
         # semantic = cv2.resize(semantic,(240,320),interpolation=cv2.INTER_NEAREST)
+        # === [修复] 强制调整图片尺寸以适配可视化画布 ===
+        # [恢复] 直接赋值，不需要 resize，因为它们本来就是 640x480
         self.vis_image[50:530, 15:655] = self.rgb_vis
         self.vis_image[50:530, 670:1310] = semantic
-        self.vis_image[50:530,1325:1805] = sem_map_vis
+        self.vis_image[50:530, 1325:1805] = sem_map_vis
 
         pos = (
             (start_x * 100. / args.map_resolution - gy1)
@@ -576,7 +555,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env_hm3d):
                  int(color_palette[9] * 255))
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
 
-        if args.visualize:
+        if False: # args.visualize:  <-- 强制关闭
             # Displaying the image
             cv2.imshow("Thread {}".format(self.rank), self.vis_image)
             cv2.waitKey(1)

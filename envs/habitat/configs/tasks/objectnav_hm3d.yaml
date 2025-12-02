@@ -1,49 +1,98 @@
-ENVIRONMENT:
-  MAX_EPISODE_STEPS: 500
-SIMULATOR:
-  TURN_ANGLE: 30
-  TILT_ANGLE: 30
-  ACTION_SPACE_CONFIG: "v1"
-  AGENT_0:
-    SENSORS: ['RGB_SENSOR', 'DEPTH_SENSOR', 'SEMANTIC_SENSOR']
-    HEIGHT: 0.88
-    RADIUS: 0.18
-  HABITAT_SIM_V0:
-    GPU_DEVICE_ID: 0
-    ALLOW_SLIDING: True 
-  SEMANTIC_SENSOR:
-    WIDTH: 640
-    HEIGHT: 480
-    HFOV: 79
-    POSITION: [0, 0.88, 0]
-  RGB_SENSOR:
-    WIDTH: 640
-    HEIGHT: 480
-    HFOV: 79
-    POSITION: [0, 0.88, 0]
-  DEPTH_SENSOR:
-    WIDTH: 640
-    HEIGHT: 480
-    HFOV: 79
-    MIN_DEPTH: 0.5
-    MAX_DEPTH: 5.0
-    POSITION: [0, 0.88, 0]
-  SCENE_DATASET: "/home/yhcao/DATA/HM3D/scene_datasets/hm3d_v0.2/hm3d/hm3d_annotated_basis.scene_dataset_config.json"
-TASK:
-  TYPE: ObjectNav-v1
-  POSSIBLE_ACTIONS: ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", "LOOK_UP", "LOOK_DOWN"]
-  SENSORS: ['OBJECTGOAL_SENSOR', 'GPS_SENSOR', 'COMPASS_SENSOR']
-  GOAL_SENSOR_UUID: objectgoal
-  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
-  DISTANCE_TO_GOAL:
-    DISTANCE_TO: VIEW_POINTS
-  SUCCESS:
-    SUCCESS_DISTANCE: 0.1
+habitat:
+  seed: 100
+  environment:
+    max_episode_steps: 500
+    max_episode_seconds: 10000000  # <--- 添加这一行 !!!
+    iterator_options:
+      cycle: True
+      shuffle: True
+      group_by_scene: True
+      num_episode_sample: -1
+      max_scene_repeat_episodes: -1
+      max_scene_repeat_steps: -1
+      step_repetition_range: 0.2
+  simulator:
+    type: Sim-v0
+    default_agent_id: 0
+    forward_step_size: 0.25
+    turn_angle: 30
+    tilt_angle: 30
+    action_space_config: "v1"
+    additional_object_paths: []
+    agents:
+      agent_0:
+        sensors: ['rgb_sensor', 'depth_sensor', 'semantic_sensor']
+        height: 0.88
+        radius: 0.18
+    habitat_sim_v0:
+      gpu_device_id: 0
+      allow_sliding: True
+      gpu_gpu: False
+    semantic_sensor:
+      width: 640
+      height: 480
+      hfov: 79
+      position: [0, 0.88, 0]
+    rgb_sensor:
+      width: 640
+      height: 480
+      hfov: 79
+      position: [0, 0.88, 0]
+    depth_sensor:
+      width: 640
+      height: 480
+      hfov: 79
+      min_depth: 0.5
+      max_depth: 5.0
+      position: [0, 0.88, 0]
+    scene_dataset: "data/scene_datasets/hm3d/hm3d_annotated_basis.scene_dataset_config.json"
+  task:
+    type: ObjectNav-v1
+    possible_actions: ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", "LOOK_UP", "LOOK_DOWN"]
+    
+    # [关键修改] 添加 actions 字典
+    actions:
+      STOP:
+        type: "StopAction"
+      MOVE_FORWARD:
+        type: "MoveForwardAction"
+      TURN_LEFT:
+        type: "TurnLeftAction"
+      TURN_RIGHT:
+        type: "TurnRightAction"
+      LOOK_UP:
+        type: "LookUpAction"
+      LOOK_DOWN:
+        type: "LookDownAction"
 
-DATASET:
-  TYPE: ObjectNav-v1
-  SPLIT: val
-  DATA_PATH: "/home/yhcao/DATA/HM3D/objectgoal_hm3d/{split}/{split}.json.gz"
-  SCENES_DIR: "/home/yhcao/DATA/HM3D/scene_datasets"
-  # CONTENT_SCENES: ['7MXmsvcQjpJ','a8BtkwhxdRV']
+    # [关键修改] 将 sensors 改名为 lab_sensors (解决 'lab_sensors not in struct' 报错)
+    lab_sensors:
+      objectgoal_sensor:
+        type: ObjectGoalSensor
+        goal_spec: "TASK_CATEGORY_ID"
+        goal_spec_max_val: 50
+      gps_sensor:
+        type: GPSSensor
+        dimensionality: 2
+      compass_sensor:
+        type: CompassSensor
+        
+    goal_sensor_uuid: objectgoal_sensor
+    
+    # [关键修改] measurements 改为字典结构 (解决 'ListConfig' 报错)
+    measurements:
+      distance_to_goal:
+        type: DistanceToGoal
+        distance_to: VIEW_POINTS
+      success:
+        type: Success
+        success_distance: 0.1
+      spl:
+        type: SPL
 
+  dataset:
+    type: ObjectNav-v1
+    split: val
+    data_path: "data/objectgoal_hm3d/{split}/{split}.json.gz"
+    scenes_dir: "data/scene_datasets"
+    content_scenes: ["*"]

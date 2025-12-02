@@ -13,6 +13,10 @@ import json
 #     css4_colors_dict = json.load(f)
 relationship_candidate=["next to","on","in","hanging on","none"]
 def load_model(MODEL_PATH):
+    # 强制覆盖路径，防止外部传入错误参数
+    MODEL_PATH = "/home/user/ZhangJiahao/CogNav_ObjNav/data/weights/CogVLM2/ZhipuAI/cogvlm2-llama3-chat-19B"
+    
+    print(f"正在加载 CogVLM2 模型，路径: {MODEL_PATH} ...") # 加一行打印，方便调试
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_PATH,
         trust_remote_code=True

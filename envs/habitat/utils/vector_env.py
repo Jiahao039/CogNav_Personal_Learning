@@ -41,13 +41,13 @@ except ImportError:
     import multiprocessing as mp
 
 import habitat
-from habitat.config import Config
+#from habitat.config import Config
 from habitat.core.env import Env, Observations, RLEnv
 from habitat.core.logging import logger
 from habitat.core.utils import tile_images
 
 def _make_env_fn(
-    config: Config, dataset: Optional[habitat.Dataset] = None, rank: int = 0
+    config, dataset: Optional[habitat.Dataset] = None, rank: int = 0
 ) -> Env:
     """Constructor for default habitat `env.Env`.
 

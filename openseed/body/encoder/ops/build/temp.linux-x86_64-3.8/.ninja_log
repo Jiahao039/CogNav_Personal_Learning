@@ -1,0 +1,4 @@
+# ninja log v7
+1	1758	1764314742990403124	/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/build/temp.linux-x86_64-3.8/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/src/cpu/ms_deform_attn_cpu.o	f5ead65d0764df77
+1	5766	1764314742989403112	/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/build/temp.linux-x86_64-3.8/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/src/vision.o	a6870c3a671bbcbe
+1	6465	1764314742990403124	/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/build/temp.linux-x86_64-3.8/home/user/ZhangJiahao/CogNav_ObjNav/openseed/body/encoder/ops/src/cuda/ms_deform_attn_cuda.o	4a317476125cf28f

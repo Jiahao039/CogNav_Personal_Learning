@@ -55,7 +55,7 @@ class ObjectGoal_Env_hm3d(habitat.RLEnv):
 
         # self.scene = self._env.sim.semantic_annotations()
 
-        fileName = '/home/yhcao/DATA/HM3D/matterport_category_mappings.tsv'
+        fileName = 'data/matterport_category_mappings.tsv'
 
         text = ''
         lines = []

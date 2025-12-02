@@ -1,0 +1,23 @@
+--2025-11-26 16:21:20--  http://dl.fbaipublicfiles.com/habitat/habitat-test-scenes_v1.0.zip
+正在解析主机 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)... 2600:9000:2202:3400:13:6e38:acc0:93a1, 2600:9000:2202:3e00:13:6e38:acc0:93a1, 2600:9000:2202:4e00:13:6e38:acc0:93a1, ...
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:3400:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:3e00:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:4e00:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:1200:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:6200:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:ac00:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:a00:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|2600:9000:2202:b200:13:6e38:acc0:93a1|:80... 失败：连接超时。
+正在连接 dl.fbaipublicfiles.com (dl.fbaipublicfiles.com)|13.227.74.9|:80... 已连接。
+已发出 HTTP 请求，正在等待回应... 302 Moved Temporarily
+位置：http://10.3.38.8 [跟随至新的 URL]
+--2025-11-26 16:39:21--  http://10.3.38.8/
+正在连接 10.3.38.8:80... 已连接。
+已发出 HTTP 请求，正在等待回应... 200 OK
+长度： 3256 (3.2K) [text/html]
+正在保存至: ‘/home/user/ZhangJiahao/CogNav_ObjNav/data/habitat-test-scenes_v1.0.zip’
+
+     0K ...                                                   100%  714M=0s
+
+2025-11-26 16:39:21 (714 MB/s) - 已保存 ‘/home/user/ZhangJiahao/CogNav_ObjNav/data/habitat-test-scenes_v1.0.zip’ [3256/3256])
+

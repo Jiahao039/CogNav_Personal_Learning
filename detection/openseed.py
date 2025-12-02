@@ -23,7 +23,8 @@ from utils.visualizer import Visualizer
 def InitDetection():
     global model,transform
     opt = load_opt_command()
-    pretrained_pth = "model/pretrained_models/openseed_swinl_pano_sota.pt"
+    pretrained_pth = "data/weights/openseed_swinl_pano_sota.pt"
+    #pretrained_pth = "model/pretrained_models/openseed_swinl_pano_sota.pt"
     model = BaseModel(opt, build_model(opt)).from_pretrained(pretrained_pth).eval().cuda()
     t = []
     t.append(transforms.Resize(512, interpolation=Image.BICUBIC))
@@ -59,19 +60,33 @@ def convertMask(mask_origin,ids):
     for i in range(label_length) :
         masks[i]=(mask_origin == ids[i])
     return masks
-def detection(image_ori,idx,visual_save_path=None,detection_save_path=None):
+def detection(image_ori, idx, visual_save_path=None, detection_save_path=None):
+    # [修改 1] 强制缩小图片以节省显存 (从 640x480 -> 320x240)
+    # 这是解决 4090 显存爆炸的关键一步
+    #image_ori = image_ori.resize((320, 240))
+
     with torch.no_grad():
         width = image_ori.size[0]
         height = image_ori.size[1]
         image = transform(image_ori)
         image = np.asarray(image)
-        image_ori = np.asarray(image_ori)
-        images = torch.from_numpy(image.copy()).permute(2,0,1).cuda()
+        
+        # 转换为 numpy 供后续可视化使用
+        image_ori_np = np.asarray(image_ori)
+        
+        images = torch.from_numpy(image.copy()).permute(2, 0, 1).cuda()
         batch_inputs = [{'image': images, 'height': height, 'width': width}]
+        
+        # [修改 2] 每次推理前强制清理显存碎片
+        torch.cuda.empty_cache()
+        
+        # 执行推理
         outputs = model.forward(batch_inputs)
-        visual = Visualizer(image_ori, metadata=model.model.metadata)
+        
+        visual = Visualizer(image_ori_np, metadata=model.model.metadata)
         pano_seg = outputs[-1]['panoptic_seg'][0]
         pano_seg_info = outputs[-1]['panoptic_seg'][1]
+        
         for i in range(len(pano_seg_info)):
             if pano_seg_info[i]['category_id'] in model.model.metadata.thing_dataset_id_to_contiguous_id.keys():
                 pano_seg_info[i]['category_id'] = model.model.metadata.thing_dataset_id_to_contiguous_id[pano_seg_info[i]['category_id']]
@@ -80,21 +95,27 @@ def detection(image_ori,idx,visual_save_path=None,detection_save_path=None):
                 pano_seg_info[i]['isthing'] = False
                 pano_seg_info[i]['category_id'] = model.model.metadata.stuff_dataset_id_to_contiguous_id[pano_seg_info[i]['category_id']]
                 pano_seg_info[i]['category_name'] = model.model.metadata.thing_classes[pano_seg_info[i]['category_id']]
-        ###visualization
+        
+        ### visualization
         demo = visual.draw_panoptic_seg(pano_seg.cpu(), pano_seg_info) # rgb Image
-        demo.save(os.path.join(visual_save_path, str(idx)+'.png'))
+        if visual_save_path is not None:
+            demo.save(os.path.join(visual_save_path, str(idx)+'.png'))
+            
         ### save result
-        id = [pano['id']for pano in pano_seg_info]
-        mask = convertMask(pano_seg.cpu().numpy(),id)
+        id = [pano['id'] for pano in pano_seg_info]
+        mask = convertMask(pano_seg.cpu().numpy(), id)
         labels = [model.model.metadata.thing_classes[pano['category_id']] for pano in pano_seg_info]
-        if len(labels) > 0 :
-            visual_feature=torch.stack([pano['semantic_feature'] for pano in pano_seg_info])
+        
+        results = None
+        if len(labels) > 0:
+            # visual_feature = torch.stack([pano['semantic_feature'] for pano in pano_seg_info])
             bbox = torch.stack([pano['bbox'] for pano in pano_seg_info])
-            category_id = [pano['category_id']for pano in pano_seg_info]
-            category_name = [pano['category_name']for pano in pano_seg_info]
-            visual_feature=torch.stack([pano['semantic_feature'] for pano in pano_seg_info])
-            text_feature = torch.stack([getattr(model.model.sem_seg_head.predictor.lang_encoder,'default_text_embeddings')[pano['category_id']] for pano in pano_seg_info])
-            if len(category_id) > 0 :
+            category_id = [pano['category_id'] for pano in pano_seg_info]
+            category_name = [pano['category_name'] for pano in pano_seg_info]
+            visual_feature = torch.stack([pano['semantic_feature'] for pano in pano_seg_info])
+            text_feature = torch.stack([getattr(model.model.sem_seg_head.predictor.lang_encoder, 'default_text_embeddings')[pano['category_id']] for pano in pano_seg_info])
+            
+            if len(category_id) > 0:
                 results = {
                     "xyxy": bbox.cpu().numpy(),
                     "class_id": np.asarray(category_id),
@@ -104,10 +125,9 @@ def detection(image_ori,idx,visual_save_path=None,detection_save_path=None):
                     "text_feats": text_feature.cpu().numpy(),
                 }
                 if detection_save_path is not None:
-                    with gzip.open(detection_save_path+str(idx)+".pkl.gz", "wb") as f:
+                    with gzip.open(detection_save_path + str(idx) + ".pkl.gz", "wb") as f:
                         pkl.dump(results, f)
-        else :
-            results=None
+                        
     return results
 def read_pkl(path_file):
     output = open(path_file, 'rb')

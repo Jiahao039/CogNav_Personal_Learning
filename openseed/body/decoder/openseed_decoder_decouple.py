@@ -402,7 +402,7 @@ class MaskDINODecoder(nn.Module):
         src_flatten = torch.cat(src_flatten, 1)  # bs, \sum{hxw}, c
         mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.cpu().prod(1).to(spatial_shapes.device).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         predictions_class = []
@@ -562,7 +562,7 @@ class MaskDINODecoder(nn.Module):
         src_flatten = torch.cat(src_flatten, 1)  # bs, \sum{hxw}, c
         mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.cpu().prod(1).to(spatial_shapes.device).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         predictions_class = []

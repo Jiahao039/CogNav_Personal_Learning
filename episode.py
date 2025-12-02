@@ -27,6 +27,7 @@ from utils.voronoi import generateVoronoi,projectCurrentAgentLoc,find_another_vi
 import json
 import logging
 import sys
+
 class Episode:
     def __init__(self, args):
         self.args = args
@@ -36,7 +37,11 @@ class Episode:
         
         # Logging and loss variables
         self.num_scenes = args.num_processes  # how many training processes to use
-        self.num_episodes = int(args.num_eval_episodes)  # number of test episodes per scene
+        
+        # [修改] 强制设置为 5 次，方便快速测试
+        if self.args.eval:
+            self.args.num_eval_episodes = 5
+        self.num_episodes = int(args.num_eval_episodes) 
 
         self.map_size_cm = args.map_size_cm
         self.global_downscaling = args.global_downscaling
@@ -49,7 +54,7 @@ class Episode:
         self.num_local_steps = args.num_local_steps
         self.num_global_steps = args.num_global_steps
 
-        self.eval = args.eval  # 这里有点奇怪，只有eval?
+        self.eval = args.eval
         self.map_resolution = args.map_resolution
         self.num_sem_categories = args.num_sem_categories
         self.max_height = int(200 / self.map_resolution)
@@ -71,12 +76,10 @@ class Episode:
         self.distance = []
         self.room_message={}
         self.graph=None
-        # self.embedder = self.configure_lm('RoBERTa-large')
-        # self.ff_net = self.load_feed_forward_net()
         self.last_done = 0
         self.skip_times = args.skip_times
         self.start_found = -1
-        self.get_hm3d_semantic_map_index('/home/yhcao/DATA/HM3D/matterport_category_mappings.tsv')
+        self.get_hm3d_semantic_map_index('data/matterport_category_mappings.tsv')
 
         self.log_dir = "{}/{}/{}/".format(args.dump_location, args.scenes[0],args.skip_times)
         self.dump_dir = "{}/{}/{}/".format(args.dump_location, args.scenes[0],args.skip_times)
@@ -110,11 +113,6 @@ class Episode:
         def init_map_and_pose_for_env(e):
             full_map[e].fill_(0.)
             full_pose[e].fill_(0.)
-            # full_ob_map = np.zeros((self.num_scenes, full_w, full_h))
-            # full_ex_map = np.zeros((self.num_scenes, full_w, full_h))
-            # target_edge_map = np.zeros((self.num_scenes, full_w, full_h))
-            # target_point_map = np.zeros((self.num_scenes, full_w, full_h))
-
             step_masks[e] = 0
             stair_flag[e] = 0
             clear_flag[e] = 0
@@ -128,9 +126,6 @@ class Episode:
 
             full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
 
-            # lmb[e] = self.get_local_map_boundaries((loc_r, loc_c),
-            #                                        (local_w, local_h),
-            #                                        (full_w, full_h))
             lmb[e] = [0,full_w,0,full_h]
             planner_pose_inputs[e, 3:] = lmb[e]
             origins[e] = [lmb[e][2] * self.map_resolution / 100.0,
@@ -145,10 +140,8 @@ class Episode:
             gpt_target_result=[]
             needed_rotation = []
             self.distance = {}
-            # local_map[e] = full_map[e, :, lmb[e, 0]:lmb[e, 1], lmb[e, 2]:lmb[e, 3]]
-            # local_pose[e] = full_pose[e] - torch.from_numpy(origins[e]).to(self.device).float()
             return target_reach,gpt_target_result,needed_rotation
-        # g_step = (step // self.num_local_steps) % self.num_global_steps
+
         obs, infos, done = init_data_var_dict['obs'], init_data_var_dict['infos'], init_data_var_dict['done']
         episode_success, episode_spl, episode_dist =\
             init_data_var_dict['episode_success'], init_data_var_dict['episode_spl'], init_data_var_dict['episode_dist']
@@ -167,14 +160,10 @@ class Episode:
         frontier_score_list = init_data_map_dict['frontier_score_list']
         spl_per_category, success_per_category = init_data_map_dict['spl_per_category'], init_data_map_dict['success_per_category']
         global_goals = init_data_map_dict['global_goals']
-        # l_step = step % self.num_local_steps
-
-        # Reinitialize variables when episode ends
+        
         l_masks = torch.FloatTensor([0 if x else 1 for x in done]).to(self.device)
         g_masks *= l_masks
         save_path = path + str(save_i)+"/"
-        # @brief: save opt !!! save original observation
-        # save_ori_obs_rgbd(infos[0]['ori_obs'], step)
         
         for e, x in enumerate(done):
             if x or self.skip_times > 0:
@@ -190,17 +179,15 @@ class Episode:
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
                     episode_dist[e].append(dist)
-                    sys.exit()
                     if len(episode_success[e]) == self.num_episodes:
                         finished[e] = 1
-                    # import pdb
-                    # pdb.set_trace()
+                        sys.exit()
                 wait_env[e] = 1.
                 target_reach,gpt_target_result,needed_rotation = init_map_and_pose_for_env(e)
                 
                 if self.skip_times > 0 :
                     self.skip_times = self.skip_times -1
-        # Semantic Mapping Module
+
         poses = torch.from_numpy(np.asarray(
             [infos[env_idx]['sensor_pose'] for env_idx in range(self.num_scenes)]
         )).float().to(self.device)
@@ -209,25 +196,18 @@ class Episode:
             [infos[env_idx]['eve_angle'] for env_idx in range(self.num_scenes)]
         )
 
-        # obs: Tensor(1, m, 120, 160)
-        # poses: Tensor(1, 3)  这一次action之后pose的变化
-        # local_map: Tensor(1, 20, 480, 480)
-        # local_pose: Tensor(1, 3)  # action之前的pose
-        # eve_angle: Tensor(1,)
-        # self.llm=LLM(infos[e]['goal_name'],'deterministic')
         self.llm = LLM()
         full_map, local_map_stair, full_pose= \
             self.sem_map_module(obs, infos[0]['ori_obs'], poses, full_map, full_pose, eve_angle, origins, idx=step-self.last_done,save_path=save_path)
         
         locs = full_pose.cpu().numpy()
         planner_pose_inputs[:, :3] = locs
-        full_map[:, 2, :, :].fill_(0.) # Resetting current location channel
+        full_map[:, 2, :, :].fill_(0.) 
         for e in range(self.num_scenes):
             r, c = locs[e, 1], locs[e, 0]
             loc_r, loc_c = [int(r * 100.0 / self.map_resolution),
                             int(c * 100.0 / self.map_resolution)]
             full_map[e, 2:4, loc_r - 2:loc_r + 3, loc_c - 2:loc_c + 3] = 1.
-            # ------------------------------------------------------------------
             if self.eval:
                 if loc_r > full_w: loc_r = full_w - 1
                 if loc_c > full_h: loc_c = full_h - 1
@@ -245,7 +225,6 @@ class Episode:
         goal_maps = [np.zeros((full_w, full_h)) for _ in range(self.num_scenes)]
         for i,obj in enumerate(self.sem_map_module.objects) :
             if len(obj['class_id']) != 0 :
-                # print(max(set(obj['class_name']), key=obj['class_name'].count))
                 if i+2 not in self.not_target:
                     if set(obj['class_id']) & set(categories_mapping_to_openseed[infos[e]['goal_cat_id']]) :
                         counter = Counter(obj['class_id'])
@@ -262,26 +241,25 @@ class Episode:
                     agent_room = self.llm.get_room(os.path.join(save_path, 'image',str(step-self.last_done)+'.jpg'))
                     self.room_message[tuple(pos_map)]=agent_room
                     break
-                except Exception as ex: # rate limit
+                except Exception as ex:
                     print(f"[ERROR] in LLM inference =====> {ex}, sleep for 20s...")
                     time.sleep(20)
                     continue
             end=time.time()
             print(agent_room,"query time:",end-start)
         self.global_position_history.append(pos_map)
-        ### change this by action corresponds to move 
+        
         if len(self.move_threshold) >= 20 :
             cha = max(self.move_threshold[-20:])-min(self.move_threshold[-20:])
             if cha < 15 or len(self.move_threshold) > 80 :
                 print("replan by ourself")
                 infos[0]['replan']=True
         if infos[0]['replan'] or self.graph is None or (found_obj_id !=-1 and target_reach and self.start_found !=-1):
-            ################################
             target_reach = True
             self.move_threshold=[]
             for e in range(self.num_scenes):
                 step_masks[e] += 1
-                if wait_env[e] == 1: # New episode
+                if wait_env[e] == 1: 
                     wait_env[e] = 0.
                 locs = full_pose[e].cpu().numpy()
                 r, c = locs[1], locs[0]
@@ -310,7 +288,7 @@ class Episode:
                                 found_obj_rate = most_common_count/len(obj['class_id'])             
             full_map[0,4]=obstacle_map
             self.graph,leaf_values,full_ex_map[0],full_ob_map[0],explored_nodes,frontier_nodes = generateVoronoi(full_map,self.global_position_history,full_w=full_w,full_h=full_h,step=step-self.last_done,save_path=save_path)
-            ##### state transition and landmark selection
+            
             if self.graph is None:
                 node_rooms = None
             else:
@@ -325,12 +303,11 @@ class Episode:
                             try:
                                 answer = self.llm.query_target_obj(os.path.join(save_path, 'image',str(select_img)+'.jpg'),goal_name)
                                 break
-                            except Exception as ex: # rate limit
+                            except Exception as ex:
                                 print(f"[ERROR] in LLM inference =====> {ex}, sleep for 20s...")
                                 time.sleep(20)
                                 continue
                 user = state_prompt(goal_name,obstacle_map,objects,bg_objects,self.graph,node_rooms,frontier_nodes,state,target_level = answer)
-                # print(user)
                 state_new,relative = self.llm.query_state_transition(user)
                 print("current state:",state_new,"relative object or room:",relative)
                 if found_obj_id != -1:
@@ -340,8 +317,15 @@ class Episode:
                 state = state_new
             else :
                 state = "Broad Search"
+            
+            # [修复] 提前初始化 pos，防止 UnboundLocalError
+            pos = {}
             if self.graph is not None :
                 pos = nx.get_node_attributes(self.graph, 'pos')
+            
+            found_elements = []
+            node_candidate = []
+
             if state == "Broad Search":
                 if self.graph is not None :
                     self.graph,agent_location_node = projectCurrentAgentLoc(tuple(pos_map),self.graph)
@@ -350,39 +334,15 @@ class Episode:
                     start=time.time()
                     while True:
                         try:
-                            # response,node = self.llm.query_node_graph_o1("map/graph_"+str(step)+".jpg",user)
                             response,node = self.llm.query_node_txt(user)
                             break
-                        except Exception as ex: # rate limit
+                        except Exception as ex:
                             print(f"[ERROR] in LLM inference =====> {ex}, sleep for 20s...")
                             time.sleep(20)
                             continue
                     found_elements=[node]
                     end=time.time()
                     print(response,f"time:{end-start}")
-                    if len(found_elements) != 0 :
-                        if found_elements[0] in pos.keys() and np.linalg.norm(np.array(pos[found_elements[0]])-pos_map) < 20 :
-                            ss = set(node_candidate)-set(explored_nodes)
-                            ss = list(ss)
-                            if len(ss) > 0 :
-                                self.global_position=np.array([int(pos[ss[0]][0]),int(pos[ss[0]][1])])
-                            elif len(node_candidate) > 0 :
-                                self.global_position=np.array([int(pos[node_candidate[0]][0]),int(pos[node_candidate[0]][1])])
-                            else :
-                                array = np.array(list(pos.values()))
-                                array = array.reshape(-1, 2)
-                                iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                                self.global_position=array[iddx].astype(int)
-                        # print("found_elements",found_elements[0],"find node time:",end-start)
-                        else :
-                            self.global_position=np.array([int(pos[found_elements[0]][0]),int(pos[found_elements[0]][1])])
-                    else :
-                        array = np.array(list(pos.values()))
-                        array = array.reshape(-1, 2)
-                        iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                        self.global_position=array[iddx].astype(int)
-                    self.global_position_history.append(self.global_position)
-                
                 else:
                     actions = torch.randn(self.num_scenes, 2)*6
                     cpu_actions = nn.Sigmoid()(actions).numpy()
@@ -390,8 +350,8 @@ class Episode:
                                     for action in cpu_actions]
                     global_goals = [[min(x, int(full_w - 1)), min(y, int(full_h - 1))]
                                     for x, y in global_goals]
-
                     g_masks = torch.ones(self.num_scenes).float().to(self.device)
+
             elif state == "Contextual Search":
                 self.graph,agent_location_node = projectCurrentAgentLoc(tuple(pos_map),self.graph)
                 node_rooms = projectHistoryToGraph(self.graph,pos_map,self.room_message,50)
@@ -399,38 +359,16 @@ class Episode:
                 start=time.time()
                 while True:
                     try:
-                        # response,node = self.llm.query_node_graph_o1("map/graph_"+str(step)+".jpg",user)
                         response,node = self.llm.query_node_txt(user)
                         break
-                    except Exception as ex: # rate limit
+                    except Exception as ex:
                         print(f"[ERROR] in LLM inference =====> {ex}, sleep for 20s...")
                         time.sleep(20)
                         continue
                 found_elements=[node]
                 end=time.time()
                 print(response,f"time:{end-start}")
-                if len(found_elements) != 0 :
-                    if found_elements[0] in pos.keys() and np.linalg.norm(np.array(pos[found_elements[0]])-pos_map) < 20 :
-                        ss = set(node_candidate)-set(explored_nodes)
-                        ss = list(ss)
-                        if len(ss) > 0 :
-                            self.global_position=np.array([int(pos[ss[0]][0]),int(pos[ss[0]][1])])
-                        elif len(node_candidate) > 0 :
-                            self.global_position=np.array([int(pos[node_candidate[0]][0]),int(pos[node_candidate[0]][1])])
-                        else :
-                            array = np.array(list(pos.values()))
-                            array = array.reshape(-1, 2)
-                            iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                            self.global_position=array[iddx].astype(int)
-                    # print("found_elements",found_elements[0],"find node time:",end-start)
-                    else :
-                        self.global_position=np.array([int(pos[found_elements[0]][0]),int(pos[found_elements[0]][1])])
-                else :
-                    array = np.array(list(pos.values()))
-                    array = array.reshape(-1, 2)
-                    iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                    self.global_position=array[iddx].astype(int)
-                self.global_position_history.append(self.global_position)
+
             elif state == "Observe Target":
                 self.graph,agent_location_node = projectCurrentAgentLoc(tuple(pos_map),self.graph)
                 node_rooms = projectHistoryToGraph(self.graph,pos_map,self.room_message,50)
@@ -438,39 +376,52 @@ class Episode:
                 start=time.time()
                 while True:
                     try:
-                        # response,node = self.llm.query_node_graph_o1("map/graph_"+str(step)+".jpg",user)
                         response,node = self.llm.query_node_txt(user)
                         break
-                    except Exception as ex: # rate limit
+                    except Exception as ex:
                         print(f"[ERROR] in LLM inference =====> {ex}, sleep for 20s...")
                         time.sleep(20)
                         continue
                 found_elements=[node]
                 end=time.time()
                 print(response,f"time:{end-start}")
-                if len(found_elements) != 0 :
-                    if found_elements[0] in pos.keys() and np.linalg.norm(np.array(pos[found_elements[0]])-pos_map) < 20 :
-                        ss = set(node_candidate)-set(explored_nodes)
-                        ss = list(ss)
-                        if len(ss) > 0 :
+                
+            # [修复] 统一后的位置更新逻辑，包含安全检查
+            if state in ["Broad Search", "Contextual Search", "Observe Target"]:
+                target_node = found_elements[0] if len(found_elements) > 0 else None
+                
+                # 检查 target_node 是否有效且存在于 pos 中
+                valid_goal_set = False
+                if target_node is not None and target_node != -1 and target_node in pos:
+                    if np.linalg.norm(np.array(pos[target_node])-pos_map) < 20:
+                        # 尝试从候选列表寻找替代
+                        ss = list(set(node_candidate)-set(explored_nodes))
+                        if len(ss) > 0 and ss[0] in pos:
                             self.global_position=np.array([int(pos[ss[0]][0]),int(pos[ss[0]][1])])
-                        elif len(node_candidate) > 0 :
+                            valid_goal_set = True
+                        elif len(node_candidate) > 0 and node_candidate[0] in pos:
                             self.global_position=np.array([int(pos[node_candidate[0]][0]),int(pos[node_candidate[0]][1])])
-                        else :
-                            array = np.array(list(pos.values()))
-                            array = array.reshape(-1, 2)
-                            iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                            self.global_position=array[iddx].astype(int)
-                    # print("found_elements",found_elements[0],"find node time:",end-start)
+                            valid_goal_set = True
                     else :
-                        self.global_position=np.array([int(pos[found_elements[0]][0]),int(pos[found_elements[0]][1])])
-                else :
-                    array = np.array(list(pos.values()))
-                    array = array.reshape(-1, 2)
-                    iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
-                    self.global_position=array[iddx].astype(int)
+                        self.global_position=np.array([int(pos[target_node][0]),int(pos[target_node][1])])
+                        valid_goal_set = True
+                
+                # 兜底逻辑：如果上面的逻辑都没设置好 goal，则执行兜底
+                if not valid_goal_set:
+                    if pos:
+                        array = np.array(list(pos.values()))
+                        array = array.reshape(-1, 2)
+                        iddx=np.argmax(np.max(np.linalg.norm(array[:,None,:]-pos_map[None,None,:],axis=-1),axis=-1))
+                        self.global_position=array[iddx].astype(int)
+                        print(f"[Warning] LLM returned invalid node {target_node}, using fallback frontier.")
+                    else:
+                        # 极端情况：图没建好，保持原地
+                        self.global_position = pos_map 
+
                 self.global_position_history.append(self.global_position)
-                target_reach = False
+                if state == "Observe Target":
+                    target_reach = False
+
             elif state == "Candidate Verification":
                 indices_3=np.array(np.unravel_index(obj['voxel_index'], (self.map_size_cm//self.map_resolution,self.map_size_cm//self.map_resolution,self.max_height-self.min_height),order='C')).T
                 center_2d = np.mean(indices_3[:,:2],axis=0)
@@ -488,12 +439,14 @@ class Episode:
         elif (step-self.last_done) % 10 ==0 :
             objects,bg_objects,scene_graph,obstacle_map,wall = self.sem_map_module.updateSceneGraph(save_path=save_path,idx=step-self.last_done,exp_map=full_map[0,1])
             full_map[0,4]=obstacle_map
-            ### select the frontier edge # 找到目前整個地圖的邊緣
+            ### select the frontier edge 
             self.graph,leaf_values,full_ex_map[0],full_ob_map[0],explored_nodes,frontier_nodes = generateVoronoi(full_map,self.global_position_history,full_w=full_w,full_h=full_h,step=step-self.last_done,save_path=save_path)
             if self.graph is not None and self.global_position is not None :
                 self.graph,agent_location_node = projectCurrentAgentLoc(tuple(self.global_position),self.graph)
                 pos = nx.get_node_attributes(self.graph, 'pos')
-                self.global_position=np.array([int(pos[agent_location_node][0]),int(pos[agent_location_node][1])])
+                # 增加对 pos[agent_location_node] 的检查
+                if agent_location_node in pos:
+                    self.global_position=np.array([int(pos[agent_location_node][0]),int(pos[agent_location_node][1])])
         # ------------------------------------------------------------------
         for e in range(self.num_scenes):
             if self.global_position is not None :
@@ -513,31 +466,28 @@ class Episode:
                 print("achieve the target")
                 goal_maps[0][indices_3[:,1], indices_3[:,0]] = 1
                 found_goal[0]=1
-        # Take action and get next observation
+        
         planner_inputs = [{} for e in range(self.num_scenes)]
         if self.skip_times > 0 :
             done = 1
         else :
             done = 0
         for e, p_input in enumerate(planner_inputs):
-            # planner_pose_inputs[e, 3:] = [0, local_w, 0, local_h]
             p_input['map_pred'] = full_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred'] = full_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = planner_pose_inputs[e]
-            p_input['goal'] = goal_maps[e]  # global_goals[e]
-            p_input['map_target'] = target_point_map[e]  # global_goals[e]
+            p_input['goal'] = goal_maps[e] 
+            p_input['map_target'] = target_point_map[e] 
             p_input['done']=done
             p_input['new_goal'] = step == self.num_local_steps - 1
             p_input['found_goal'] = found_goal[e]
             p_input['wait'] = wait_env[e] or finished[e]
             p_input['step'] = step-self.last_done
             if self.visualize or self.print_images:
-                # p_input['map_edge'] = target_edge_map[e]
-                # full_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = full_map[e,4,:,:].cpu().numpy()
                 p_input['graph'] = self.graph
                 p_input['semantic_path'] = os.path.join(save_path,"visual/",str(step-self.last_done)+".png")
-                # p_input['sem_objects'] = full_map[e,4,:,:].cpu().numpy()
+                
         obs, fail_case, done, infos = self.envs.plan_act_and_preprocess(planner_inputs)
 
         init_data_var_dict = {
@@ -567,7 +517,6 @@ class Episode:
         }
 
         init_data_map_dict = {
-            # 'local_map': local_map,
             'full_map': full_map,
             'full_map_new':full_map_new,
             'global_goals': global_goals,
@@ -583,7 +532,10 @@ class Episode:
             'success_per_category': success_per_category,
         }
 
-        return init_data_var_dict, init_data_map_dict, finished, wait_env,save_i
+        # [显存清理]
+        torch.cuda.empty_cache()
+
+        return init_data_var_dict, init_data_map_dict, finished, wait_env, save_i
 
     def init_episode(self):
         g_masks = torch.ones(self.num_scenes).float().to(self.device)
@@ -994,5 +946,3 @@ class Episode:
                 self.hm3d_semantic_mapping[i[2]] = i[-1]
                 self.hm3d_semantic_index[i[-1]] = int(i[-2])
                 self.hm3d_semantic_index_inv[int(i[-2])] = i[-1]
-
-    
